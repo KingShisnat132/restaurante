@@ -141,7 +141,7 @@
       </select>
     </div>
 
-    <!-- INÍCIO DO NOVO CAMPO OBSERVAÇÃO -->
+    <!-- Campo novo Observação -->
     <div class="form-group">
       <label for="observacao">Observação:</label>
       <input 
@@ -153,7 +153,6 @@
         onblur="if(this.value==='') { this.placeholder='Ex: Tirar cebola, Adicionar cebola etc'; this.style.color='#aaa'; }"
       >
     </div>
-    <!-- FIM DO NOVO CAMPO OBSERVAÇÃO -->
 
     <div id="entregaFields" class="entrega-fields" style="display:none;">
       <label for="rua">Rua:</label>
@@ -194,45 +193,52 @@
     ];
     const PRICES = { P: 20, M: 26, G: 28 };
 
-    // Carregar opções principais
     const opcaoSelect = document.getElementById('opcao');
-    OPTIONS.forEach((opt, idx) => {
-      let o = document.createElement('option');
-      o.value = idx;
-      o.textContent = opt.name;
-      opcaoSelect.appendChild(o);
-    });
-
-    // Subcategorias dinâmicas
     const subcatGroup = document.getElementById('subcat-group');
     const subcatSelect = document.getElementById('subcat');
+
+    function carregarPratos() {
+      opcaoSelect.innerHTML = ''; // limpa para garantir
+      OPTIONS.forEach((opt, idx) => {
+        const option = document.createElement('option');
+        option.value = idx;
+        option.textContent = opt.name;
+        opcaoSelect.appendChild(option);
+      });
+    }
+
     function atualizarSubcat() {
-      const idx = +opcaoSelect.value;
+      const idx = Number(opcaoSelect.value);
       const subs = OPTIONS[idx].sub;
       subcatSelect.innerHTML = '';
       if (subs.length > 0) {
         subs.forEach(s => {
-          let o = document.createElement('option');
+          const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
           subcatSelect.appendChild(o);
         });
-        subcatGroup.style.display = '';
+        subcatGroup.style.display = 'block';
       } else {
         subcatGroup.style.display = 'none';
       }
     }
+
     opcaoSelect.addEventListener('change', atualizarSubcat);
+
+    // Inicializa os selects
+    carregarPratos();
     atualizarSubcat();
 
-    // Carrinho
     let cart = [];
+
     function adicionarCarrinho() {
       const tamanho = document.getElementById('tamanho').value;
-      const idx = +opcaoSelect.value;
+      const idx = Number(opcaoSelect.value);
       const prato = OPTIONS[idx].name;
       let subcat = '';
       if (OPTIONS[idx].sub.length > 0) subcat = subcatSelect.value;
+
       cart.push({ tamanho, prato, subcat, price: PRICES[tamanho] });
       atualizarCart();
     }
@@ -245,29 +251,28 @@
       }
       let html = '<ul>';
       cart.forEach((item, i) => {
-        html += `<li><b>Marmita ${item.tamanho} - ${item.prato}${item.subcat ? ' ('+item.subcat+')' : ''}</b> <span class="price">R$ ${item.price.toFixed(2)}</span> <a style="color:#d00;cursor:pointer;" title="Remover" onclick="removerCarrinho(${i})">✖️</a></li>`;
+        html += `<li><b>Marmita ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''}</b> <span class="price">R$ ${item.price.toFixed(2)}</span> <a style="color:#d00;cursor:pointer;" title="Remover" onclick="removerCarrinho(${i})">✖️</a></li>`;
       });
       html += '</ul>';
-      let total = cart.reduce((a,b)=>a+b.price,0);
+      let total = cart.reduce((a, b) => a + b.price, 0);
       html += `<div class="cart-total">Total: R$ ${total.toFixed(2)}</div>`;
       html += `<button onclick="enviarWhats()">Finalizar Pedido no WhatsApp</button>`;
       cartList.innerHTML = html;
     }
 
     function removerCarrinho(idx) {
-      cart.splice(idx,1);
+      cart.splice(idx, 1);
       atualizarCart();
     }
 
-    // Entrega ou retirada
     function mostrarEntregaCampos() {
       const tipo = document.getElementById('tipoEntrega').value;
-      document.getElementById('entregaFields').style.display = (tipo === 'Entrega') ? '' : 'none';
+      document.getElementById('entregaFields').style.display = (tipo === 'Entrega') ? 'block' : 'none';
     }
 
-    // Enviar para WhatsApp
     function enviarWhats() {
       if (!cart.length) return;
+
       const tipo = document.getElementById('tipoEntrega').value;
       let entregaInfo = '';
       if (tipo === 'Entrega') {
@@ -282,4 +287,27 @@
       } else {
         entregaInfo = "\n\nRetirada no restaurante";
       }
-      const numeroWpp = "
+
+      const observacao = document.getElementById('observacao').value.trim();
+      let obsTexto = observacao ? `\n\nObservação: ${observacao}` : '';
+
+      let textoPedido = 'Olá, gostaria de fazer o pedido:\n';
+
+      cart.forEach((item, i) => {
+        textoPedido += `- Marmita ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''} - R$ ${item.price.toFixed(2)}\n`;
+      });
+
+      const total = cart.reduce((a, b) => a + b.price, 0);
+
+      textoPedido += `\nTotal: R$ ${total.toFixed(2)}`;
+      textoPedido += entregaInfo + obsTexto;
+
+      // Número de exemplo do WhatsApp do restaurante, troque pelo seu número
+      const numeroWpp = '5511999999999';
+
+      const url = `https://wa.me/${numeroWpp}?text=${encodeURIComponent(textoPedido)}`;
+      window.open(url, '_blank');
+    }
+  </script>
+</body>
+</html>
