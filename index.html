@@ -103,6 +103,15 @@
       border: 1px dashed #ff595e;
     }
     .entrega-fields input { margin-bottom: 9px; }
+    /* Payment classes */
+    .pagamento-fields {
+      margin-top: 8px;
+      background: #fffbe9;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px dashed #ff595e;
+    }
+    .pagamento-fields input { margin-bottom: 9px; }
     @media (max-width: 600px) {
       .container { max-width: 97vw; padding: 10vw 3vw;}
     }
@@ -162,6 +171,22 @@
       <label for="bairro">Bairro:</label>
       <input type="text" id="bairro" placeholder="Bairro" />
     </div>
+
+    <!-- PAGAMENTO -->
+    <div class="form-group">
+      <label for="pagamento">Forma de Pagamento:</label>
+      <select id="pagamento" onchange="mostrarPagamentoCampos()">
+        <option value="Pix">Pix</option>
+        <option value="Cartão">Cartão</option>
+        <option value="Dinheiro">Dinheiro</option>
+      </select>
+    </div>
+    <div id="pagamentoFields" class="pagamento-fields" style="display:none;">
+      <label for="valorDinheiro">Valor em Dinheiro:</label>
+      <input type="number" id="valorDinheiro" placeholder="Ex: 50" min="0" oninput="calcularTroco()" />
+      <div id="trocoInfo" style="color:#ff595e;margin-top:5px;font-weight:bold;"></div>
+    </div>
+    <!-- FIM PAGAMENTO -->
 
     <div class="cart" id="cart">
       <h2>🛒 Seu Carrinho</h2>
@@ -258,6 +283,7 @@
       html += `<div class="cart-total">Total: R$ ${total.toFixed(2)}</div>`;
       html += `<button onclick="enviarWhats()">Finalizar Pedido no WhatsApp</button>`;
       cartList.innerHTML = html;
+      calcularTroco(); // Atualiza o troco se já estiver aberto o campo dinheiro
     }
 
     function removerCarrinho(idx) {
@@ -268,6 +294,34 @@
     function mostrarEntregaCampos() {
       const tipo = document.getElementById('tipoEntrega').value;
       document.getElementById('entregaFields').style.display = (tipo === 'Entrega') ? 'block' : 'none';
+    }
+
+    function mostrarPagamentoCampos() {
+      const pagamento = document.getElementById('pagamento').value;
+      const pagamentoFields = document.getElementById('pagamentoFields');
+      if (pagamento === 'Dinheiro') {
+        pagamentoFields.style.display = 'block';
+        calcularTroco();
+      } else {
+        pagamentoFields.style.display = 'none';
+      }
+    }
+
+    function calcularTroco() {
+      const pagamento = document.getElementById('pagamento').value;
+      const trocoInfo = document.getElementById('trocoInfo');
+      if (pagamento !== 'Dinheiro' || cart.length === 0) {
+        trocoInfo.innerHTML = '';
+        return;
+      }
+      const total = cart.reduce((a, b) => a + b.price, 0);
+      const valorDinheiro = parseFloat(document.getElementById('valorDinheiro').value || '0');
+      if (!valorDinheiro || valorDinheiro < total) {
+        trocoInfo.innerHTML = '';
+        return;
+      }
+      const troco = valorDinheiro - total;
+      trocoInfo.innerHTML = `Troco para R$ ${valorDinheiro.toFixed(2)}: <span style="color:#128c7e">R$ ${troco.toFixed(2)}</span>`;
     }
 
     function enviarWhats() {
@@ -288,6 +342,23 @@
         entregaInfo = "\n\nRetirada no restaurante";
       }
 
+      const pagamento = document.getElementById('pagamento').value;
+      let pagamentoInfo = `\n\nPagamento: ${pagamento}`;
+      let trocoTexto = '';
+      if (pagamento === 'Dinheiro') {
+        const valorDinheiroEl = document.getElementById('valorDinheiro');
+        const valorDinheiro = parseFloat(valorDinheiroEl.value || '0');
+        const total = cart.reduce((a, b) => a + b.price, 0);
+        if (!valorDinheiro || valorDinheiro < total) {
+          alert("Digite um valor em dinheiro igual ou maior ao total.");
+          valorDinheiroEl.focus();
+          return;
+        }
+        const troco = valorDinheiro - total;
+        pagamentoInfo += ` (R$ ${valorDinheiro.toFixed(2)})`;
+        trocoTexto = `\nTroco: R$ ${troco.toFixed(2)}`;
+      }
+
       const observacao = document.getElementById('observacao').value.trim();
       let obsTexto = observacao ? `\n\nObservação: ${observacao}` : '';
 
@@ -300,7 +371,7 @@
       const total = cart.reduce((a, b) => a + b.price, 0);
 
       textoPedido += `\nTotal: R$ ${total.toFixed(2)}`;
-      textoPedido += entregaInfo + obsTexto;
+      textoPedido += entregaInfo + pagamentoInfo + trocoTexto + obsTexto;
 
       // Número de exemplo do WhatsApp do restaurante, troque pelo seu número
       const numeroWpp = '5511976672189';
@@ -308,6 +379,10 @@
       const url = `https://wa.me/${numeroWpp}?text=${encodeURIComponent(textoPedido)}`;
       window.open(url, '_blank');
     }
+
+    // Inicialização extra para pagamento
+    document.getElementById('pagamento').addEventListener('change', mostrarPagamentoCampos);
+    document.getElementById('valorDinheiro').addEventListener('input', calcularTroco);
   </script>
 </body>
 </html>
