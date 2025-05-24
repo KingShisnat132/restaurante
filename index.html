@@ -274,7 +274,7 @@
       throw new Error('Rota não encontrada');
     }
 
-    // Atualizar taxa de entrega ao preencher endereço
+    // Atualizar taxa de entrega ao preencher endereço (3 tentativas)
     let distanciaEntregaKm = null;
     let taxaEntrega = 0;
 
@@ -289,40 +289,39 @@
         atualizarCart();
         return;
       }
-      // Primeiro tenta com bairro
-      let enderecoCliente = `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`;
-      try {
-        const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + ', Brasil');
-        let geoCliente = await geocodeEnderecoORS(enderecoCliente);
-        let distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
 
-        // Se a distância for absurda, tenta sem o bairro
-        if(distanciaKm > 30 && bairro.length > 0) {
-          enderecoCliente = `${rua}, ${numero}, Itatiba - SP, Brasil`;
-          geoCliente = await geocodeEnderecoORS(enderecoCliente);
+      // 3 tentativas: com bairro, sem bairro, só rua
+      let tentativas = [
+        `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`,
+        `${rua}, ${numero}, Itatiba - SP, Brasil`,
+        `${rua}, Itatiba - SP, Brasil`
+      ];
+      let distanciaKm = null;
+      let taxa = 0;
+      let geoCliente = null;
+      const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + ', Brasil');
+      for (let tentativa of tentativas) {
+        try {
+          geoCliente = await geocodeEnderecoORS(tentativa);
           distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
+          if (distanciaKm <= 30) break; // Aceita distância até 30km
+        } catch (e) {
+          continue;
         }
-        const taxa = calcularTaxaEntrega(distanciaKm);
-
-        if (distanciaKm > 30) {
-          document.getElementById('taxaEntregaInfo').innerHTML =
-            `Distância: ${distanciaKm.toFixed(2)} km<br><span style="color:red">Endereço parece estar fora de Itatiba ou não foi reconhecido corretamente.<br>Por favor, revise o endereço!</span>`;
-        } else if (taxa > 0) {
-          document.getElementById('taxaEntregaInfo').innerHTML =
-            `Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
-        } else {
-          document.getElementById('taxaEntregaInfo').innerHTML =
-            `Distância: ${distanciaKm.toFixed(2)} km<br>Endereço fora da área de entrega.`;
-        }
-        distanciaEntregaKm = distanciaKm;
-        taxaEntrega = taxa;
-        atualizarCart();
-      } catch(e) {
-        document.getElementById('taxaEntregaInfo').innerHTML = 'Não foi possível calcular a distância.';
-        distanciaEntregaKm = null;
-        taxaEntrega = 0;
-        atualizarCart();
       }
+      if (distanciaKm && distanciaKm <= 30) {
+        taxa = calcularTaxaEntrega(distanciaKm);
+        document.getElementById('taxaEntregaInfo').innerHTML =
+          `Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
+      } else if (distanciaKm) {
+        document.getElementById('taxaEntregaInfo').innerHTML =
+          `Distância: ${distanciaKm.toFixed(2)} km<br><span style="color:red">Endereço parece estar fora de Itatiba ou não foi reconhecido corretamente.<br>Por favor, revise o endereço!</span>`;
+      } else {
+        document.getElementById('taxaEntregaInfo').innerHTML = 'Não foi possível calcular a distância.';
+      }
+      distanciaEntregaKm = distanciaKm;
+      taxaEntrega = taxa;
+      atualizarCart();
     }
 
     document.getElementById('rua').addEventListener('blur', atualizarTaxaEntrega);
