@@ -132,8 +132,8 @@
       <label for="tamanho">Tamanho:</label>
       <select id="tamanho">
         <option value="P">P (R$ 20,00)</option>
-        <option value="M">M (R$ 26,00)</option>
-        <option value="G">G (R$ 28,00)</option>
+        <option value="M">M (R$ 23,00)</option>
+        <option value="G">G (R$ 26,00)</option>
       </select>
     </div>
     <div class="form-group">
@@ -173,6 +173,8 @@
       <input type="text" id="numero" placeholder="Número" />
       <label for="bairro">Bairro:</label>
       <input type="text" id="bairro" placeholder="Bairro" />
+      <label for="complemento">APT, Quadra ou Bloco:</label>
+      <input type="text" id="complemento" placeholder="Ex: Apto 101, Bloco B, Quadra 5..." />
       <div id="taxaEntregaInfo"></div>
     </div>
 
@@ -489,11 +491,13 @@
         const rua = document.getElementById('rua').value.trim();
         const numero = document.getElementById('numero').value.trim();
         const bairro = document.getElementById('bairro').value.trim();
+        const complemento = document.getElementById('complemento').value.trim();
         if (!rua || !numero || !bairro) {
           alert("Por favor, preencha Rua, Número e Bairro para entrega!");
           return;
         }
         entregaInfo = `\n\nEntrega em:\nRua: ${rua}\nNúmero: ${numero}\nBairro: ${bairro}`;
+        if (complemento) entregaInfo += `\nComplemento: ${complemento}`;
         if (!taxaEntrega || taxaEntrega === 0) {
           alert("Não foi possível calcular a taxa de entrega ou endereço fora da área.");
           return;
