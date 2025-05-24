@@ -211,7 +211,7 @@
   </div>
   <script>
     // OpenRouteService API Key
-   const ORS_API_KEY = '5b3ce3597851110001cf6248a7a5568827af480488a7963d23f09c79'; // <<<< TROQUE PELA SUA CHAVE DA openrouteservice.org
+    const ORS_API_KEY = '5b3ce3597851110001cf6248a7a5568827af480488a7963d23f09c79';
 
     // Endereço fixo do restaurante
     const ENDERECO_RESTAURANTE = "R. Luíz Scavone, 372, Vila Santa Clara, Itatiba - SP, 13256-010";
@@ -238,12 +238,14 @@
       return 0;
     }
 
-    // Geocodificar endereço usando OpenRouteService
+    // Geocodificar endereço usando OpenRouteService (com debug)
     async function geocodeEnderecoORS(endereco) {
       const url = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(endereco)}&size=1`;
       const resp = await fetch(url);
       const data = await resp.json();
       if (data.features && data.features.length > 0) {
+        // Mostra o endereço encontrado para debug
+        alert('Endereço encontrado: ' + data.features[0].properties.label);
         const [lng, lat] = data.features[0].geometry.coordinates;
         return { lat, lng };
       }
@@ -287,14 +289,19 @@
         atualizarCart();
         return;
       }
-      const enderecoCliente = `${rua}, ${numero}, ${bairro}, Itatiba - SP`;
+      // Sempre garanta cidade-estado no endereço do cliente
+      const enderecoCliente = `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`;
       try {
-        const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE);
+        const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + ', Brasil');
         const geoCliente = await geocodeEnderecoORS(enderecoCliente);
         const distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
         const taxa = calcularTaxaEntrega(distanciaKm);
 
-        if (taxa > 0) {
+        // Se a distância for absurda, avise
+        if (distanciaKm > 30) {
+          document.getElementById('taxaEntregaInfo').innerHTML =
+            `Distância: ${distanciaKm.toFixed(2)} km<br><span style="color:red">Endereço parece estar fora de Itatiba ou não foi reconhecido corretamente.<br>Por favor, revise o endereço!</span>`;
+        } else if (taxa > 0) {
           document.getElementById('taxaEntregaInfo').innerHTML =
             `Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
         } else {
