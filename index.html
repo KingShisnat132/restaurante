@@ -168,7 +168,7 @@
 
     <div id="entregaFields" class="entrega-fields" style="display:none;">
       <label for="rua">Rua:</label>
-      <input type="text" id="rua" placeholder="Nome da Rua" />
+      <input type="text" id="rua" placeholder="Nome completo da rua" />
       <label for="numero">Número:</label>
       <input type="text" id="numero" placeholder="Número" />
       <label for="bairro">Bairro:</label>
@@ -213,8 +213,8 @@
     // OpenRouteService API Key
     const ORS_API_KEY = '5b3ce3597851110001cf6248a7a5568827af480488a7963d23f09c79';
 
-    // Endereço fixo do restaurante
-    const ENDERECO_RESTAURANTE = "R. Luíz Scavone, 372, Vila Santa Clara, Itatiba - SP, 13256-010";
+    // Endereço fixo do restaurante (marco zero correto e validado!)
+    const ENDERECO_RESTAURANTE = "Rua Luiz Scavone, 372, 13256-010, Itatiba, SP, Brasil";
 
     // Função de faixa de preço por KM
     function calcularTaxaEntrega(km) {
@@ -238,16 +238,20 @@
       return 0;
     }
 
-    // Geocodificar endereço usando OpenRouteService (sem popup, com fallback de bairro)
+    // Geocodificar endereço usando OpenRouteService
     async function geocodeEnderecoORS(endereco) {
       const url = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(endereco)}&size=1`;
       const resp = await fetch(url);
       const data = await resp.json();
       if (data.features && data.features.length > 0) {
-        // Apenas log para debug, não mostra popup!
+        // Log para debug
         console.log('Endereço reconhecido:', data.features[0].properties.label);
-        const [lng, lat] = data.features[0].geometry.coordinates;
-        return { lat, lng };
+        const label = data.features[0].properties.label;
+        return {
+          lat: data.features[0].geometry.coordinates[1],
+          lng: data.features[0].geometry.coordinates[0],
+          label
+        };
       }
       throw new Error('Endereço não encontrado');
     }
@@ -274,7 +278,18 @@
       throw new Error('Rota não encontrada');
     }
 
-    // Atualizar taxa de entrega ao preencher endereço (3 tentativas)
+    // Validação do endereço do cliente
+    function validarEnderecoCliente() {
+      const rua = document.getElementById('rua').value.trim();
+      if (rua.split(' ').length < 3) {
+        alert('Por favor, digite o nome completo da rua, por exemplo: Rua Conego Francisco de Assis Gandolpho');
+        document.getElementById('rua').focus();
+        return false;
+      }
+      return true;
+    }
+
+    // Atualizar taxa de entrega ao preencher endereço (com validação do label)
     let distanciaEntregaKm = null;
     let taxaEntrega = 0;
 
@@ -289,6 +304,7 @@
         atualizarCart();
         return;
       }
+      if (!validarEnderecoCliente()) return;
 
       // 3 tentativas: com bairro, sem bairro, só rua
       let tentativas = [
@@ -299,10 +315,17 @@
       let distanciaKm = null;
       let taxa = 0;
       let geoCliente = null;
-      const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + ', Brasil');
+      let labelCliente = '';
+      const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + '');
       for (let tentativa of tentativas) {
         try {
-          geoCliente = await geocodeEnderecoORS(tentativa);
+          const geo = await geocodeEnderecoORS(tentativa);
+          geoCliente = geo;
+          labelCliente = geo.label;
+          // só aceita se label contém 'Itatiba'
+          if (!labelCliente.toLowerCase().includes('itatiba')) {
+            continue;
+          }
           distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
           if (distanciaKm <= 30) break; // Aceita distância até 30km
         } catch (e) {
@@ -312,7 +335,10 @@
       if (distanciaKm && distanciaKm <= 30) {
         taxa = calcularTaxaEntrega(distanciaKm);
         document.getElementById('taxaEntregaInfo').innerHTML =
-          `Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
+          `Endereço reconhecido: <b>${labelCliente}</b><br>Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
+      } else if (labelCliente && !labelCliente.toLowerCase().includes('itatiba')) {
+        document.getElementById('taxaEntregaInfo').innerHTML =
+          `Endereço reconhecido: <b>${labelCliente}</b><br><span style="color:red">Endereço não é em Itatiba/SP.<br>Por favor, revise e digite o nome completo da rua!</span>`;
       } else if (distanciaKm) {
         document.getElementById('taxaEntregaInfo').innerHTML =
           `Distância: ${distanciaKm.toFixed(2)} km<br><span style="color:red">Endereço parece estar fora de Itatiba ou não foi reconhecido corretamente.<br>Por favor, revise o endereço!</span>`;
