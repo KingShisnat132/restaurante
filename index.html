@@ -132,8 +132,8 @@
       <label for="tamanho">Tamanho:</label>
       <select id="tamanho">
         <option value="P">P (R$ 20,00)</option>
-        <option value="M">M (R$ 23,00)</option>
-        <option value="G">G (R$ 26,00)</option>
+        <option value="M">M (R$ 26,00)</option>
+        <option value="G">G (R$ 28,00)</option>
       </select>
     </div>
     <div class="form-group">
@@ -482,6 +482,30 @@
       trocoInfo.innerHTML = `Troco para R$ ${valorDinheiro.toFixed(2)}: <span style="color:#128c7e">R$ ${troco.toFixed(2)}</span>`;
     }
 
+    // Função de formatação do campo complemento para WhatsApp
+    function formatarComplementoParaWhatsapp(complemento) {
+      if (!complemento) return '';
+      // Padroniza para "Apartamento", "Bloco", "Quadra", etc.
+      const comp = complemento.trim();
+      const padroes = [
+        { regex: /^ap(t|to)?\.?\s*(\d+)/i, nome: 'Apartamento' },
+        { regex: /^bloco\.?\s*([a-z0-9]+)/i, nome: 'Bloco' },
+        { regex: /^quadra\.?\s*([a-z0-9]+)/i, nome: 'Quadra' }
+      ];
+      for (const padrao of padroes) {
+        const res = comp.match(padrao.regex);
+        if (res) {
+          // Se for "Apartamento", pega o número
+          if (padrao.nome === 'Apartamento') return `Apartamento ${res[2]}`;
+          // Se for "Bloco" ou "Quadra", pega o nome/numero
+          if (padrao.nome === 'Bloco' || padrao.nome === 'Quadra') return `${padrao.nome} ${res[1]}`;
+        }
+      }
+      // Caso não reconheça, retorna com primeira letra maiúscula
+      return comp.charAt(0).toUpperCase() + comp.slice(1);
+    }
+
+    // Função para enviar mensagem formatada no WhatsApp
     function enviarWhats() {
       if (!cart.length) return;
 
@@ -491,23 +515,25 @@
         const rua = document.getElementById('rua').value.trim();
         const numero = document.getElementById('numero').value.trim();
         const bairro = document.getElementById('bairro').value.trim();
-        const complemento = document.getElementById('complemento').value.trim();
+        const complementoRaw = document.getElementById('complemento').value.trim();
+        const complemento = formatarComplementoParaWhatsapp(complementoRaw);
         if (!rua || !numero || !bairro) {
           alert("Por favor, preencha Rua, Número e Bairro para entrega!");
           return;
         }
-        entregaInfo = `\n\nEntrega em:\nRua: ${rua}\nNúmero: ${numero}\nBairro: ${bairro}`;
-        if (complemento) entregaInfo += `\nComplemento: ${complemento}`;
+        // Endereço formatado com emojis e negritos
+        entregaInfo = `\n🏠 *Endereço para entrega:*\n*Rua:* ${rua}\n*Número:* ${numero}\n*Bairro:* ${bairro}`;
+        if (complemento) entregaInfo += `\n*${complemento}*`;
         if (!taxaEntrega || taxaEntrega === 0) {
           alert("Não foi possível calcular a taxa de entrega ou endereço fora da área.");
           return;
         }
       } else {
-        entregaInfo = "\n\nRetirada no restaurante";
+        entregaInfo = "\n📦 *Retirada no restaurante*";
       }
 
       const pagamento = document.getElementById('pagamento').value;
-      let pagamentoInfo = `\n\nPagamento: ${pagamento}`;
+      let pagamentoInfo = `\n💳 *Pagamento:* ${pagamento}`;
       let trocoTexto = '';
       let total = cart.reduce((a, b) => a + b.price, 0);
       if (tipo === 'Entrega' && taxaEntrega > 0) {
@@ -522,22 +548,23 @@
           return;
         }
         const troco = valorDinheiro - total;
-        pagamentoInfo += ` (R$ ${valorDinheiro.toFixed(2)})`;
-        trocoTexto = `\nTroco: R$ ${troco.toFixed(2)}`;
+        pagamentoInfo += ` (*R$ ${valorDinheiro.toFixed(2)}*)`;
+        trocoTexto = `\n💵 *Troco:* R$ ${troco.toFixed(2)}`;
       }
 
       const observacao = document.getElementById('observacao').value.trim();
-      let obsTexto = observacao ? `\n\nObservação: ${observacao}` : '';
+      let obsTexto = observacao ? `\n📝 *Observação:* ${observacao}` : '';
 
-      let textoPedido = 'Olá, gostaria de fazer o pedido:\n';
+      // Monta o pedido com emojis, negritos e formatação profissional
+      let textoPedido = '🍽️ *Novo pedido de marmita!*\n';
       cart.forEach((item, i) => {
-        textoPedido += `- Marmita ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''} - R$ ${item.price.toFixed(2)}\n`;
+        textoPedido += `\n${i + 1}. 🥘 *Marmita ${item.tamanho}* - *${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''}* — R$ ${item.price.toFixed(2)}`;
       });
       if (tipo === 'Entrega' && taxaEntrega > 0) {
-        textoPedido += `Taxa de entrega: R$ ${taxaEntrega.toFixed(2)}\n`;
+        textoPedido += `\n🚚 *Taxa de entrega:* R$ ${taxaEntrega.toFixed(2)}`;
       }
-      textoPedido += `\nTotal: R$ ${total.toFixed(2)}`;
-      textoPedido += entregaInfo + pagamentoInfo + trocoTexto + obsTexto;
+      textoPedido += `\n\n🧾 *Total:* R$ ${total.toFixed(2)}`;
+      textoPedido += `${entregaInfo}${pagamentoInfo}${trocoTexto}${obsTexto}`;
 
       // Número de exemplo do WhatsApp do restaurante, troque pelo seu número
       const numeroWpp = '5511976672189';
