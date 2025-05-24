@@ -238,14 +238,14 @@
       return 0;
     }
 
-    // Geocodificar endereço usando OpenRouteService (com debug)
+    // Geocodificar endereço usando OpenRouteService (sem popup, com fallback de bairro)
     async function geocodeEnderecoORS(endereco) {
       const url = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(endereco)}&size=1`;
       const resp = await fetch(url);
       const data = await resp.json();
       if (data.features && data.features.length > 0) {
-        // Mostra o endereço encontrado para debug
-        alert('Endereço encontrado: ' + data.features[0].properties.label);
+        // Apenas log para debug, não mostra popup!
+        console.log('Endereço reconhecido:', data.features[0].properties.label);
         const [lng, lat] = data.features[0].geometry.coordinates;
         return { lat, lng };
       }
@@ -282,22 +282,28 @@
       const rua = document.getElementById('rua').value.trim();
       const numero = document.getElementById('numero').value.trim();
       const bairro = document.getElementById('bairro').value.trim();
-      if (!rua || !numero || !bairro) {
+      if (!rua || !numero) {
         document.getElementById('taxaEntregaInfo').innerHTML = '';
         distanciaEntregaKm = null;
         taxaEntrega = 0;
         atualizarCart();
         return;
       }
-      // Sempre garanta cidade-estado no endereço do cliente
-      const enderecoCliente = `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`;
+      // Primeiro tenta com bairro
+      let enderecoCliente = `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`;
       try {
         const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + ', Brasil');
-        const geoCliente = await geocodeEnderecoORS(enderecoCliente);
-        const distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
+        let geoCliente = await geocodeEnderecoORS(enderecoCliente);
+        let distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
+
+        // Se a distância for absurda, tenta sem o bairro
+        if(distanciaKm > 30 && bairro.length > 0) {
+          enderecoCliente = `${rua}, ${numero}, Itatiba - SP, Brasil`;
+          geoCliente = await geocodeEnderecoORS(enderecoCliente);
+          distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
+        }
         const taxa = calcularTaxaEntrega(distanciaKm);
 
-        // Se a distância for absurda, avise
         if (distanciaKm > 30) {
           document.getElementById('taxaEntregaInfo').innerHTML =
             `Distância: ${distanciaKm.toFixed(2)} km<br><span style="color:red">Endereço parece estar fora de Itatiba ou não foi reconhecido corretamente.<br>Por favor, revise o endereço!</span>`;
