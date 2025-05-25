@@ -218,8 +218,9 @@
     // Endereço fixo do restaurante (marco zero correto e validado!)
     const ENDERECO_RESTAURANTE = "Rua Luiz Scavone, 372, 13256-010, Itatiba, SP, Brasil";
 
-    // Função de faixa de preço por KM
+    // Função de faixa de preço por KM (corrigida para arredondar pra cima)
     function calcularTaxaEntrega(km) {
+      km = Math.ceil(Number(km));
       if (km <= 2) return 3;
       if (km <= 5) return 4;
       if (km <= 6) return 5;
@@ -237,7 +238,7 @@
       if (km <= 18) return 32;
       if (km <= 19) return 35;
       if (km <= 20) return 38;
-      return 0;
+      return 0; // Fora da área
     }
 
     // Geocodificar endereço usando OpenRouteService
@@ -485,55 +486,55 @@
     // Função de formatação do campo complemento para WhatsApp
     function formatarComplementoParaWhatsapp(complemento) {
       if (!complemento) return '';
-      // Padroniza para "Apartamento", "Bloco", "Quadra", etc.
-      const comp = complemento.trim();
-      const padroes = [
-        { regex: /^ap(t|to)?\.?\s*(\d+)/i, nome: 'Apartamento' },
-        { regex: /^bloco\.?\s*([a-z0-9]+)/i, nome: 'Bloco' },
-        { regex: /^quadra\.?\s*([a-z0-9]+)/i, nome: 'Quadra' }
-      ];
-      for (const padrao of padroes) {
-        const res = comp.match(padrao.regex);
-        if (res) {
-          // Se for "Apartamento", pega o número
-          if (padrao.nome === 'Apartamento') return `Apartamento ${res[2]}`;
-          // Se for "Bloco" ou "Quadra", pega o nome/numero
-          if (padrao.nome === 'Bloco' || padrao.nome === 'Quadra') return `${padrao.nome} ${res[1]}`;
-        }
-      }
+      // Se a pessoa digitar só o número, vira "Apartamento"
+      if (/^\d+$/.test(complemento)) return `Apartamento ${complemento}`;
+      // Apartamento com variantes
+      const aptMatch = complemento.match(/ap(t|to)?\.?\s*(\d+)/i);
+      if (aptMatch) return `Apartamento ${aptMatch[2]}`;
+      // Bloco
+      const blocoMatch = complemento.match(/bloco\.?\s*([a-z0-9]+)/i);
+      if (blocoMatch) return `Bloco ${blocoMatch[1]}`;
+      // Quadra
+      const quadraMatch = complemento.match(/quadra\.?\s*([a-z0-9]+)/i);
+      if (quadraMatch) return `Quadra ${quadraMatch[1]}`;
       // Caso não reconheça, retorna com primeira letra maiúscula
-      return comp.charAt(0).toUpperCase() + comp.slice(1);
+      return complemento.charAt(0).toUpperCase() + complemento.slice(1);
     }
 
-    // Função para enviar mensagem formatada no WhatsApp
+    // Função para enviar mensagem formatada no WhatsApp (apenas negrito e texto seguro)
     function enviarWhats() {
       if (!cart.length) return;
 
       const tipo = document.getElementById('tipoEntrega').value;
       let entregaInfo = '';
+      let rua = '';
+      let numero = '';
+      let bairro = '';
+      let complementoRaw = '';
+      let complemento = '';
       if (tipo === 'Entrega') {
-        const rua = document.getElementById('rua').value.trim();
-        const numero = document.getElementById('numero').value.trim();
-        const bairro = document.getElementById('bairro').value.trim();
-        const complementoRaw = document.getElementById('complemento').value.trim();
-        const complemento = formatarComplementoParaWhatsapp(complementoRaw);
+        rua = document.getElementById('rua').value.trim();
+        numero = document.getElementById('numero').value.trim();
+        bairro = document.getElementById('bairro').value.trim();
+        complementoRaw = document.getElementById('complemento').value.trim();
+        complemento = formatarComplementoParaWhatsapp(complementoRaw);
         if (!rua || !numero || !bairro) {
           alert("Por favor, preencha Rua, Número e Bairro para entrega!");
           return;
         }
-        // Endereço formatado com emojis e negritos
-        entregaInfo = `\n🏠 *Endereço para entrega:*\n*Rua:* ${rua}\n*Número:* ${numero}\n*Bairro:* ${bairro}`;
-        if (complemento) entregaInfo += `\n*${complemento}*`;
+        // Endereço formatado com negritos
+        entregaInfo = `\n\n*Endereço para entrega:*\nRua: ${rua}\nNúmero: ${numero}\nBairro: ${bairro}`;
+        if (complemento) entregaInfo += `\n${complemento}`;
         if (!taxaEntrega || taxaEntrega === 0) {
           alert("Não foi possível calcular a taxa de entrega ou endereço fora da área.");
           return;
         }
       } else {
-        entregaInfo = "\n📦 *Retirada no restaurante*";
+        entregaInfo = "\n\n*Retirada no restaurante*";
       }
 
       const pagamento = document.getElementById('pagamento').value;
-      let pagamentoInfo = `\n💳 *Pagamento:* ${pagamento}`;
+      let pagamentoInfo = `\n\n*Pagamento:* ${pagamento}`;
       let trocoTexto = '';
       let total = cart.reduce((a, b) => a + b.price, 0);
       if (tipo === 'Entrega' && taxaEntrega > 0) {
@@ -548,22 +549,22 @@
           return;
         }
         const troco = valorDinheiro - total;
-        pagamentoInfo += ` (*R$ ${valorDinheiro.toFixed(2)}*)`;
-        trocoTexto = `\n💵 *Troco:* R$ ${troco.toFixed(2)}`;
+        pagamentoInfo += ` (R$ ${valorDinheiro.toFixed(2)})`;
+        trocoTexto = `\n*Troco:* R$ ${troco.toFixed(2)}`;
       }
 
       const observacao = document.getElementById('observacao').value.trim();
-      let obsTexto = observacao ? `\n📝 *Observação:* ${observacao}` : '';
+      let obsTexto = observacao ? `\n*Observação:* ${observacao}` : '';
 
-      // Monta o pedido com emojis, negritos e formatação profissional
-      let textoPedido = '🍽️ *Novo pedido de marmita!*\n';
+      // Monta o pedido com negritos e formatação profissional
+      let textoPedido = '*Pedido de Marmita*\n';
       cart.forEach((item, i) => {
-        textoPedido += `\n${i + 1}. 🥘 *Marmita ${item.tamanho}* - *${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''}* — R$ ${item.price.toFixed(2)}`;
+        textoPedido += `\n${i + 1}. ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''} - R$ ${item.price.toFixed(2)}`;
       });
       if (tipo === 'Entrega' && taxaEntrega > 0) {
-        textoPedido += `\n🚚 *Taxa de entrega:* R$ ${taxaEntrega.toFixed(2)}`;
+        textoPedido += `\nTaxa de entrega: R$ ${taxaEntrega.toFixed(2)}`;
       }
-      textoPedido += `\n\n🧾 *Total:* R$ ${total.toFixed(2)}`;
+      textoPedido += `\n\n*Total:* R$ ${total.toFixed(2)}`;
       textoPedido += `${entregaInfo}${pagamentoInfo}${trocoTexto}${obsTexto}`;
 
       // Número de exemplo do WhatsApp do restaurante, troque pelo seu número
