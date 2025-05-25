@@ -212,13 +212,43 @@
     </div>
   </div>
   <script>
-    // OpenRouteService API Key
-    const ORS_API_KEY = '5b3ce3597851110001cf6248a7a5568827af480488a7963d23f09c79';
-
-    // Endereço fixo do restaurante (marco zero correto e validado!)
+    // Geoapify API Key
+    const GEOAPIFY_KEY = "33d453d7330c4916a6ad99074c00187a";
+    // Endereço fixo do restaurante
     const ENDERECO_RESTAURANTE = "Rua Luiz Scavone, 372, 13256-010, Itatiba, SP, Brasil";
 
-    // Função de faixa de preço por KM (corrigida para arredondar pra cima)
+    // Funções Geoapify
+    async function geoapifyGeocode(endereco) {
+      const url = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(endereco)}&lang=pt&apiKey=${GEOAPIFY_KEY}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.features && data.features.length > 0) {
+        const f = data.features[0];
+        return {
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+          label: f.properties.formatted || f.properties.label || ""
+        };
+      }
+      throw new Error('Endereço não encontrado');
+    }
+    async function geoapifyRota(origem, destino) {
+      const url = `https://api.geoapify.com/v1/routing?waypoints=${origem.lat},${origem.lng}|${destino.lat},${destino.lng}&mode=drive&apiKey=${GEOAPIFY_KEY}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (
+        data.features &&
+        data.features[0] &&
+        data.features[0].properties &&
+        typeof data.features[0].properties.distance === "number"
+      ) {
+        // Distância em metros
+        return data.features[0].properties.distance / 1000;
+      }
+      throw new Error("Não foi possível calcular a distância.");
+    }
+
+    // Função de taxa de entrega
     function calcularTaxaEntrega(km) {
       km = Math.ceil(Number(km));
       if (km <= 2) return 3;
@@ -241,58 +271,6 @@
       return 0; // Fora da área
     }
 
-    // Geocodificar endereço usando OpenRouteService
-    async function geocodeEnderecoORS(endereco) {
-      const url = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(endereco)}&size=1`;
-      const resp = await fetch(url);
-      const data = await resp.json();
-      if (data.features && data.features.length > 0) {
-        // Log para debug
-        console.log('Endereço reconhecido:', data.features[0].properties.label);
-        const label = data.features[0].properties.label;
-        return {
-          lat: data.features[0].geometry.coordinates[1],
-          lng: data.features[0].geometry.coordinates[0],
-          label
-        };
-      }
-      throw new Error('Endereço não encontrado');
-    }
-
-    // Calcular rota usando OpenRouteService Directions
-    async function calcularDistanciaORS(geoOrigem, geoDestino) {
-      const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}`;
-      const body = JSON.stringify({
-        coordinates: [
-          [geoOrigem.lng, geoOrigem.lat],
-          [geoDestino.lng, geoDestino.lat]
-        ]
-      });
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body
-      });
-      const data = await resp.json();
-      if (data.routes && data.routes.length > 0) {
-        const metros = data.routes[0].summary.distance;
-        return metros / 1000;
-      }
-      throw new Error('Rota não encontrada');
-    }
-
-    // Validação do endereço do cliente
-    function validarEnderecoCliente() {
-      const rua = document.getElementById('rua').value.trim();
-      if (rua.split(' ').length < 3) {
-        alert('Por favor, digite o nome completo da rua, por exemplo: Rua Conego Francisco de Assis Gandolpho');
-        document.getElementById('rua').focus();
-        return false;
-      }
-      return true;
-    }
-
-    // Atualizar taxa de entrega ao preencher endereço (com validação do label)
     let distanciaEntregaKm = null;
     let taxaEntrega = 0;
 
@@ -307,57 +285,30 @@
         atualizarCart();
         return;
       }
-      if (!validarEnderecoCliente()) return;
+      try {
+        const geoRestaurante = await geoapifyGeocode(ENDERECO_RESTAURANTE);
+        let enderecoCliente = `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`;
+        let geoCliente = await geoapifyGeocode(enderecoCliente);
+        const distanciaKm = await geoapifyRota(geoRestaurante, geoCliente);
+        const taxa = calcularTaxaEntrega(distanciaKm);
 
-      // 3 tentativas: com bairro, sem bairro, só rua
-      let tentativas = [
-        `${rua}, ${numero}, ${bairro}, Itatiba - SP, Brasil`,
-        `${rua}, ${numero}, Itatiba - SP, Brasil`,
-        `${rua}, Itatiba - SP, Brasil`
-      ];
-      let distanciaKm = null;
-      let taxa = 0;
-      let geoCliente = null;
-      let labelCliente = '';
-      const geoRestaurante = await geocodeEnderecoORS(ENDERECO_RESTAURANTE + '');
-      for (let tentativa of tentativas) {
-        try {
-          const geo = await geocodeEnderecoORS(tentativa);
-          geoCliente = geo;
-          labelCliente = geo.label;
-          // só aceita se label contém 'Itatiba'
-          if (!labelCliente.toLowerCase().includes('itatiba')) {
-            continue;
-          }
-          distanciaKm = await calcularDistanciaORS(geoRestaurante, geoCliente);
-          if (distanciaKm <= 30) break; // Aceita distância até 30km
-        } catch (e) {
-          continue;
-        }
+        document.getElementById('taxaEntregaInfo').innerHTML =
+          `Endereço reconhecido: <b>${geoCliente.label}</b><br>Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
+        distanciaEntregaKm = distanciaKm;
+        taxaEntrega = taxa;
+        atualizarCart();
+      } catch (e) {
+        document.getElementById('taxaEntregaInfo').innerHTML = "Endereço não reconhecido.";
+        distanciaEntregaKm = null;
+        taxaEntrega = 0;
+        atualizarCart();
       }
-      if (distanciaKm && distanciaKm <= 30) {
-        taxa = calcularTaxaEntrega(distanciaKm);
-        document.getElementById('taxaEntregaInfo').innerHTML =
-          `Endereço reconhecido: <b>${labelCliente}</b><br>Distância: ${distanciaKm.toFixed(2)} km<br>Taxa de entrega: R$ ${taxa.toFixed(2)}`;
-      } else if (labelCliente && !labelCliente.toLowerCase().includes('itatiba')) {
-        document.getElementById('taxaEntregaInfo').innerHTML =
-          `Endereço reconhecido: <b>${labelCliente}</b><br><span style="color:red">Endereço não é em Itatiba/SP.<br>Por favor, revise e digite o nome completo da rua!</span>`;
-      } else if (distanciaKm) {
-        document.getElementById('taxaEntregaInfo').innerHTML =
-          `Distância: ${distanciaKm.toFixed(2)} km<br><span style="color:red">Endereço parece estar fora de Itatiba ou não foi reconhecido corretamente.<br>Por favor, revise o endereço!</span>`;
-      } else {
-        document.getElementById('taxaEntregaInfo').innerHTML = 'Não foi possível calcular a distância.';
-      }
-      distanciaEntregaKm = distanciaKm;
-      taxaEntrega = taxa;
-      atualizarCart();
     }
-
     document.getElementById('rua').addEventListener('blur', atualizarTaxaEntrega);
     document.getElementById('numero').addEventListener('blur', atualizarTaxaEntrega);
     document.getElementById('bairro').addEventListener('blur', atualizarTaxaEntrega);
 
-    // Opções e subopções do cardápio
+    // Cardápio
     const OPTIONS = [
       { name: "Filé de Frango", sub: ["Grelhado", "Milanesa", "Parmegiana"] },
       { name: "Bife", sub: ["Grelhado", "Milanesa", "Parmegiana"] },
@@ -380,7 +331,6 @@
         opcaoSelect.appendChild(option);
       });
     }
-
     function atualizarSubcat() {
       const idx = Number(opcaoSelect.value);
       const subs = OPTIONS[idx].sub;
@@ -397,26 +347,20 @@
         subcatGroup.style.display = 'none';
       }
     }
-
     opcaoSelect.addEventListener('change', atualizarSubcat);
-
-    // Inicializa os selects
     carregarPratos();
     atualizarSubcat();
 
     let cart = [];
-
     function adicionarCarrinho() {
       const tamanho = document.getElementById('tamanho').value;
       const idx = Number(opcaoSelect.value);
       const prato = OPTIONS[idx].name;
       let subcat = '';
       if (OPTIONS[idx].sub.length > 0) subcat = subcatSelect.value;
-
       cart.push({ tamanho, prato, subcat, price: PRICES[tamanho] });
       atualizarCart();
     }
-
     function atualizarCart() {
       const cartList = document.getElementById('cart-list');
       if (cart.length === 0) {
@@ -429,7 +373,6 @@
       });
       html += '</ul>';
       let total = cart.reduce((a, b) => a + b.price, 0);
-
       if (document.getElementById('tipoEntrega').value === 'Entrega' && taxaEntrega > 0) {
         html += `<div class="cart-total">Taxa de entrega: R$ ${taxaEntrega.toFixed(2)}</div>`;
         total += taxaEntrega;
@@ -439,19 +382,16 @@
       cartList.innerHTML = html;
       calcularTroco();
     }
-
     function removerCarrinho(idx) {
       cart.splice(idx, 1);
       atualizarCart();
     }
-
     function mostrarEntregaCampos() {
       const tipo = document.getElementById('tipoEntrega').value;
       document.getElementById('entregaFields').style.display = (tipo === 'Entrega') ? 'block' : 'none';
       document.getElementById('taxaEntregaInfo').style.display = (tipo === 'Entrega') ? 'block' : 'none';
       atualizarCart();
     }
-
     function mostrarPagamentoCampos() {
       const pagamento = document.getElementById('pagamento').value;
       const pagamentoFields = document.getElementById('pagamentoFields');
@@ -462,7 +402,6 @@
         pagamentoFields.style.display = 'none';
       }
     }
-
     function calcularTroco() {
       const pagamento = document.getElementById('pagamento').value;
       const trocoInfo = document.getElementById('trocoInfo');
@@ -482,29 +421,19 @@
       const troco = valorDinheiro - total;
       trocoInfo.innerHTML = `Troco para R$ ${valorDinheiro.toFixed(2)}: <span style="color:#128c7e">R$ ${troco.toFixed(2)}</span>`;
     }
-
-    // Função de formatação do campo complemento para WhatsApp
     function formatarComplementoParaWhatsapp(complemento) {
       if (!complemento) return '';
-      // Se a pessoa digitar só o número, vira "Apartamento"
       if (/^\d+$/.test(complemento)) return `Apartamento ${complemento}`;
-      // Apartamento com variantes
       const aptMatch = complemento.match(/ap(t|to)?\.?\s*(\d+)/i);
       if (aptMatch) return `Apartamento ${aptMatch[2]}`;
-      // Bloco
       const blocoMatch = complemento.match(/bloco\.?\s*([a-z0-9]+)/i);
       if (blocoMatch) return `Bloco ${blocoMatch[1]}`;
-      // Quadra
       const quadraMatch = complemento.match(/quadra\.?\s*([a-z0-9]+)/i);
       if (quadraMatch) return `Quadra ${quadraMatch[1]}`;
-      // Caso não reconheça, retorna com primeira letra maiúscula
       return complemento.charAt(0).toUpperCase() + complemento.slice(1);
     }
-
-    // Função para enviar mensagem formatada no WhatsApp (apenas negrito e texto seguro)
     function enviarWhats() {
       if (!cart.length) return;
-
       const tipo = document.getElementById('tipoEntrega').value;
       let entregaInfo = '';
       let rua = '';
@@ -522,7 +451,6 @@
           alert("Por favor, preencha Rua, Número e Bairro para entrega!");
           return;
         }
-        // Endereço formatado com negritos
         entregaInfo = `\n\n*Endereço para entrega:*\nRua: ${rua}\nNúmero: ${numero}\nBairro: ${bairro}`;
         if (complemento) entregaInfo += `\n${complemento}`;
         if (!taxaEntrega || taxaEntrega === 0) {
@@ -532,7 +460,6 @@
       } else {
         entregaInfo = "\n\n*Retirada no restaurante*";
       }
-
       const pagamento = document.getElementById('pagamento').value;
       let pagamentoInfo = `\n\n*Pagamento:* ${pagamento}`;
       let trocoTexto = '';
@@ -552,11 +479,8 @@
         pagamentoInfo += ` (R$ ${valorDinheiro.toFixed(2)})`;
         trocoTexto = `\n*Troco:* R$ ${troco.toFixed(2)}`;
       }
-
       const observacao = document.getElementById('observacao').value.trim();
       let obsTexto = observacao ? `\n*Observação:* ${observacao}` : '';
-
-      // Monta o pedido com negritos e formatação profissional
       let textoPedido = '*Pedido de Marmita*\n';
       cart.forEach((item, i) => {
         textoPedido += `\n${i + 1}. ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''} - R$ ${item.price.toFixed(2)}`;
@@ -566,15 +490,10 @@
       }
       textoPedido += `\n\n*Total:* R$ ${total.toFixed(2)}`;
       textoPedido += `${entregaInfo}${pagamentoInfo}${trocoTexto}${obsTexto}`;
-
-      // Número de exemplo do WhatsApp do restaurante, troque pelo seu número
       const numeroWpp = '5511976672189';
-
       const url = `https://wa.me/${numeroWpp}?text=${encodeURIComponent(textoPedido)}`;
       window.open(url, '_blank');
     }
-
-    // Inicialização para selects de pagamento
     document.getElementById('pagamento').addEventListener('change', mostrarPagamentoCampos);
     document.getElementById('valorDinheiro').addEventListener('input', calcularTroco);
 
