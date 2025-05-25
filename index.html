@@ -482,8 +482,8 @@
       const observacao = document.getElementById('observacao').value.trim();
       let obsTexto = observacao ? `\n*Observação:* ${observacao}` : '';
       let textoPedido = '*Pedido de Marmita*\n';
-      cart.forEach((item, i) => {
-        textoPedido += `\n${i + 1}. ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''} - R$ ${item.price.toFixed(2)}`;
+      cart.forEach((item) => {
+        textoPedido += `\nMarmita ${item.tamanho} - ${item.prato}${item.subcat ? ' (' + item.subcat + ')' : ''} - R$ ${item.price.toFixed(2)}`;
       });
       if (tipo === 'Entrega' && taxaEntrega > 0) {
         textoPedido += `\nTaxa de entrega: R$ ${taxaEntrega.toFixed(2)}`;
